@@ -6,15 +6,16 @@ import { customAlphabet } from 'nanoid'
 const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
 const nanoid = customAlphabet(alphabet, 7);
 
-export default function Enhancer(options={}) {
+export default function Enhancer(options = {}) {
   const {
-    initialState={},
-    elements=[],
-    scriptTransforms=[],
-    styleTransforms=[],
-    uuidFunction=nanoid,
-    bodyContent=false,
-    enhancedAttr=true
+    initialState = {},
+    elements = [],
+    scriptTransforms = [],
+    styleTransforms = [],
+    uuidFunction = nanoid,
+    bodyContent = false,
+    enhancedAttr = true,
+    markSlots = false
   } = options
   const store = Object.assign({}, initialState)
 
@@ -27,17 +28,18 @@ export default function Enhancer(options={}) {
     walk(node, child => {
       if (isCustomElement(child.tagName)) {
         if (elements[child.tagName]) {
+          const instanceID = uuidFunction()
           const {
-            frag:expandedTemplate,
-            styles:stylesToCollect,
-            scripts:scriptsToCollect,
-            links:linksToCollect
+            frag: expandedTemplate,
+            styles: stylesToCollect,
+            scripts: scriptsToCollect,
+            links: linksToCollect
           } = expandTemplate({
             node: child,
             elements,
             state: {
               context,
-              instanceID: uuidFunction(),
+              instanceID,   //: uuidFunction(),
               store
             },
             styleTransforms,
@@ -45,12 +47,17 @@ export default function Enhancer(options={}) {
           })
 
           if (enhancedAttr) {
-            child.attrs.push({ name: 'enhanced', value:'✨' })
+            child.attrs.push({ name: 'enhanced', value: '✨' })
           }
+
+          if (markSlots) {
+            child.attrs.push({ name: 'instance-id', value: instanceID })
+          }
+
           collectedScripts.push(scriptsToCollect)
           collectedStyles.push(stylesToCollect)
           collectedLinks.push(linksToCollect)
-          fillSlots(child, expandedTemplate)
+          fillSlots(child, expandedTemplate, instanceID, markSlots)
         }
       }
     })
@@ -83,7 +90,7 @@ export default function Enhancer(options={}) {
             [scriptContents || scriptSrcValue]: script
           }
         }
-        return {...acc}
+        return { ...acc }
       }, {})
 
       appendNodes(body, Object.values(uniqueScripts))
@@ -93,18 +100,18 @@ export default function Enhancer(options={}) {
         if (style?.childNodes?.[0]?.value) {
           return { ...acc, [style.childNodes[0].value]: '' }
         }
-        return {...acc}
-      }, { })
+        return { ...acc }
+      }, {})
       const mergedCss = Object.keys(uniqueStyles)
       mergedCss.sort((a, b) => {
-        const aStart = a.trim().substring(0,7)
-        const bStart = b.trim().substring(0,7)
+        const aStart = a.trim().substring(0, 7)
+        const bStart = b.trim().substring(0, 7)
         if (aStart === '@import' && bStart !== '@import') return -1
         if (aStart !== '@import' && bStart === '@import') return 1
         return 0
       })
       const mergedCssString = mergedCss.join('\n')
-      const mergedStyles = mergedCssString? `<style>${mergedCssString}</style>`:''
+      const mergedStyles = mergedCssString ? `<style>${mergedCssString}</style>` : ''
       if (mergedStyles) {
         const stylesNodeHead = [fragment(mergedStyles).childNodes[0]]
         appendNodes(head, stylesNodeHead)
@@ -118,7 +125,7 @@ export default function Enhancer(options={}) {
             [normalizeLinkHtml(link)]: link
           }
         }
-        return {...acc}
+        return { ...acc }
       }, {})
 
       appendNodes(head, Object.values(uniqueLinks))
@@ -127,7 +134,7 @@ export default function Enhancer(options={}) {
     return (bodyContent
       ? serializeOuter(body.childNodes[0])
       : serialize(doc))
-          .replace(/__b_\d+/g, '')
+      .replace(/__b_\d+/g, '')
   }
 }
 
@@ -148,7 +155,7 @@ function expandTemplate({ node, elements, state, styleTransforms, scriptTransfor
     attrs: node.attrs,
     state
   }) || ''
-  const styles= []
+  const styles = []
   const scripts = []
   const links = []
   for (const node of frag.childNodes) {
@@ -189,7 +196,7 @@ function normalizeLinkHtml(node) {
   return `<link ${attrs.join(' ')} />`
 }
 
-function renderTemplate({ name, elements, attrs=[], state={} }) {
+function renderTemplate({ name, elements, attrs = [], state = {} }) {
   attrs = attrs ? attrsToState(attrs) : {}
   state.attrs = attrs
   const templateRenderFunction = elements[name]?.render || elements[name]?.prototype?.render
@@ -205,40 +212,45 @@ function renderTemplate({ name, elements, attrs=[], state={} }) {
   }
 }
 
-function attrsToState(attrs=[], obj={}) {
+function attrsToState(attrs = [], obj = {}) {
   [...attrs].forEach(attr => obj[attr.name] = decode(attr.value))
   return obj
 }
 
-function fillSlots(node, template) {
+function fillSlots(node, template, instanceID, markSlots) {
   const slots = findSlots(template)
   const inserts = findInserts(node)
   const usedSlots = []
   const usedInserts = []
   const unnamedSlots = []
-  for (let i=0; i<slots.length; i++) {
+  for (let i = 0; i < slots.length; i++) {
     let hasSlotName = false
     const slot = slots[i]
     const slotAttrs = slot.attrs || []
 
     const slotAttrsLength = slotAttrs.length
-    for (let i=0; i < slotAttrsLength; i++) {
+    for (let i = 0; i < slotAttrsLength; i++) {
       const attr = slotAttrs[i]
       if (attr.name === 'name') {
         hasSlotName = true
         const slotName = attr.value
         const insertsLength = inserts.length
-        for (let i=0; i < insertsLength; i ++) {
+        for (let i = 0; i < insertsLength; i++) {
           const insert = inserts[i]
           const insertAttrs = insert.attrs || []
 
           const insertAttrsLength = insertAttrs.length
-          for (let i=0; i < insertAttrsLength; i++) {
+          for (let i = 0; i < insertAttrsLength; i++) {
             const attr = insertAttrs[i]
             if (attr.name === 'slot') {
               const insertSlot = attr.value
               if (insertSlot === slotName) {
                 const slotParentChildNodes = slot.parentNode.childNodes
+
+                if (markSlots) {
+                  insert.attrs.push({ name: 'slot-id', value: instanceID })
+                }
+
                 slotParentChildNodes.splice(
                   slotParentChildNodes
                     .indexOf(slot),
@@ -259,25 +271,38 @@ function fillSlots(node, template) {
     }
   }
 
-  unnamedSlots.forEach(([ slot, node ]) => {
+  unnamedSlots.forEach(([slot, node]) => {
     const nodeChildren = node.childNodes
       .filter(node => !usedInserts.includes(node))
     const children = nodeChildren.length
       ? nodeChildren
-      : [ ...slot.childNodes ]
+      : [...slot.childNodes]
     const slotParentChildNodes = slot.parentNode.childNodes
+
+    let unnamedContent = children
+    if (markSlots) {
+      const unnamedSlotWrapperSpan = {
+        nodeName: 'span',
+        tagName: 'span',
+        attrs: [{ name: "slot-id", value: instanceID }, { name: "slot", value: "" }, { name: 'style', value: "display:content;" }],
+        namespaceURI: 'http://www.w3.org/1999/xhtml',
+        childNodes: [...children]
+      }
+      unnamedContent = [unnamedSlotWrapperSpan]
+    }
+
     slotParentChildNodes.splice(
       slotParentChildNodes
         .indexOf(slot),
       1,
-      ...children
+      ...unnamedContent
     )
   })
 
   const unusedSlots = slots.filter(slot => !usedSlots.includes(slot))
   const nodeChildNodes = node.childNodes
 
-  replaceSlots(template, unusedSlots)
+  replaceSlots(template, unusedSlots, instanceID, markSlots)
   nodeChildNodes.splice(
     0,
     nodeChildNodes.length,
@@ -315,7 +340,7 @@ function findInserts(node) {
   return elements
 }
 
-function replaceSlots(node, slots) {
+function replaceSlots(node, slots, instanceID, markSlots) {
   slots.forEach(slot => {
     const value = slot.attrs.find(attr => attr.name === 'name')?.value
     const asTag = slot.attrs.find(attr => attr.name === 'as')?.value
@@ -335,6 +360,10 @@ function replaceSlots(node, slots) {
           namespaceURI: 'http://www.w3.org/1999/xhtml',
           childNodes: []
         }
+        if (markSlots) {
+          wrapperSpan.attrs.push({ value: instanceID, name: "slot-id" })
+          wrapperSpan.attrs.push({ name: 'style', value: "display:content;" })
+        }
 
         wrapperSpan.childNodes.push(...slot.childNodes)
         slot.childNodes.length = 0
@@ -342,6 +371,7 @@ function replaceSlots(node, slots) {
       }
       if (slotChildren.length === 1) {
         slotChildren[0].attrs.push({ value, name })
+        // slotChildren[0].attrs.push({ value: "xyz", name: "slot-id" })
       }
 
       const slotParentChildNodes = slot.parentNode.childNodes
@@ -349,7 +379,7 @@ function replaceSlots(node, slots) {
         slotParentChildNodes
           .indexOf(slot),
         1,
-        ...slot.childNodes
+        ...slot.childNodes,
       )
     }
   })
@@ -371,7 +401,7 @@ function applyScriptTransforms({ node, scriptTransforms, tagName }) {
   return node
 }
 
-function applyStyleTransforms({ node, styleTransforms, tagName, context='' }) {
+function applyStyleTransforms({ node, styleTransforms, tagName, context = '' }) {
   const attrs = node?.attrs || []
   if (node.childNodes.length) {
     const raw = node.childNodes[0].value

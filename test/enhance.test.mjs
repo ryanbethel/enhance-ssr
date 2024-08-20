@@ -1124,3 +1124,36 @@ test('should render empty style tag', t => {
   )
   t.end()
 })
+
+test.only('mark unnamed slot', t => {
+  const html = enhance({
+    bodyContent: true,
+    uuidFunction: function() { return 'xyz' },
+    markSlots: false,
+    elements: {
+      'my-marked-slot': ({ html }) => {
+        return html`
+         <div><slot></slot></div>
+         <p><slot name=foo></slot></p>
+         <main><slot name=bar></slot></main>`
+      },
+    },
+    enhancedAttr: false
+  })
+  const actual = html`
+  <my-marked-slot>Stuff<span slot=foo>FOO</span></my-marked-slot>
+  `
+  const expected = `
+<my-marked-slot instance-id="xyz">
+  <div><span slot-id="xyz" slot="" style="display:content;">Stuff</span></div>
+  <p><span slot="foo" slot-id="xyz">FOO</span></p>
+  <main><span slot="bar" slot-id="xyz" style="display:content;"></span></main>
+</my-marked-slot>
+`
+  t.equal(
+    strip(actual),
+    strip(expected),
+    'Will you look at that! The unnamed slot was marked.'
+  )
+  t.end()
+})

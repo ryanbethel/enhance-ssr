@@ -223,6 +223,7 @@ function fillSlots(node, template, instanceID, markSlots) {
   const usedSlots = []
   const usedInserts = []
   const unnamedSlots = []
+  const sortedNamedInserts = {}
   for (let i = 0; i < slots.length; i++) {
     let hasSlotName = false
     const slot = slots[i]
@@ -232,8 +233,9 @@ function fillSlots(node, template, instanceID, markSlots) {
     for (let i = 0; i < slotAttrsLength; i++) {
       const attr = slotAttrs[i]
       if (attr.name === 'name') {
-        hasSlotName = true
+        // hasSlotName = true // should check for name 
         const slotName = attr.value
+        hasSlotName = Boolean(slotName) // if name is "" it is an unnamed slot
         const insertsLength = inserts.length
         for (let i = 0; i < insertsLength; i++) {
           const insert = inserts[i]
@@ -245,19 +247,15 @@ function fillSlots(node, template, instanceID, markSlots) {
             if (attr.name === 'slot') {
               const insertSlot = attr.value
               if (insertSlot === slotName) {
-                const slotParentChildNodes = slot.parentNode.childNodes
 
-                if (markSlots) {
-                  insert.attrs.push({ name: 'slot-id', value: instanceID })
+                if (!sortedNamedInserts[slotName]) {
+                  sortedNamedInserts[slotName] = {}
+                  sortedNamedInserts[slotName].inserts = []
+                  sortedNamedInserts[slotName].slot = slot
+                  usedSlots.push(slot)
                 }
+                sortedNamedInserts[slotName].inserts.push(insert)
 
-                slotParentChildNodes.splice(
-                  slotParentChildNodes
-                    .indexOf(slot),
-                  1,
-                  insert
-                )
-                usedSlots.push(slot)
                 usedInserts.push(insert)
               }
             }
@@ -266,10 +264,34 @@ function fillSlots(node, template, instanceID, markSlots) {
       }
     }
 
+
     if (!hasSlotName) {
       unnamedSlots.push([slot, node])
     }
   }
+
+  for (const name of Object.keys(sortedNamedInserts)) {
+    const parentsChildren = sortedNamedInserts[name].slot.parentNode.childNodes
+    const slot = sortedNamedInserts[name].slot
+    const inserts = sortedNamedInserts[name].inserts
+
+    let slotFills = inserts
+    if (markSlots) {
+      slotFills = [
+        { nodeName: '#comment', data: ` slot start name="${name}" id="${instanceID}" ` },
+        ...inserts,
+        { nodeName: '#comment', data: ` slot end name="${name}" id="${instanceID}" ` },
+      ]
+    }
+    parentsChildren.splice(
+      parentsChildren
+        .indexOf(slot),
+      1,
+      ...slotFills,
+    )
+    usedSlots.push(slot)
+  }
+
 
   unnamedSlots.forEach(([slot, node]) => {
     const nodeChildren = node.childNodes
@@ -281,14 +303,11 @@ function fillSlots(node, template, instanceID, markSlots) {
 
     let unnamedContent = children
     if (markSlots) {
-      const unnamedSlotWrapperSpan = {
-        nodeName: 'span',
-        tagName: 'span',
-        attrs: [{ name: "slot-id", value: instanceID }, { name: "slot", value: "" }, { name: 'style', value: "display:content;" }],
-        namespaceURI: 'http://www.w3.org/1999/xhtml',
-        childNodes: [...children]
-      }
-      unnamedContent = [unnamedSlotWrapperSpan]
+      unnamedContent = [
+        { nodeName: '#comment', data: ` slot start name="" id="${instanceID}" ` },
+        ...children,
+        { nodeName: '#comment', data: ` slot end name="" id="${instanceID}" ` }
+      ]
     }
 
     slotParentChildNodes.splice(
@@ -303,6 +322,8 @@ function fillSlots(node, template, instanceID, markSlots) {
   const nodeChildNodes = node.childNodes
 
   replaceSlots(template, unusedSlots, instanceID, markSlots)
+
+  // replaceSlots(template, usedSlots, instanceID, markSlots)
   nodeChildNodes.splice(
     0,
     nodeChildNodes.length,
@@ -361,13 +382,15 @@ function replaceSlots(node, slots, instanceID, markSlots) {
           childNodes: []
         }
         if (markSlots) {
-          wrapperSpan.attrs.push({ value: instanceID, name: "slot-id" })
-          wrapperSpan.attrs.push({ name: 'style', value: "display:content;" })
+          // wrapperSpan.attrs.push({ value: instanceID, name: "slot-id" })
+          // wrapperSpan.attrs.push({ name: 'style', value: "display:content;" })
         }
 
         wrapperSpan.childNodes.push(...slot.childNodes)
         slot.childNodes.length = 0
+        if (markSlots) { slot.childNodes.push({ nodeName: '#comment', data: ` slot start name="${value}" id="${instanceID}" ` }) }
         slot.childNodes.push(wrapperSpan)
+        if (markSlots) { slot.childNodes.push({ nodeName: '#comment', data: ` slot end name="${value}" id="${instanceID}" ` }) }
       }
       if (slotChildren.length === 1) {
         slotChildren[0].attrs.push({ value, name })

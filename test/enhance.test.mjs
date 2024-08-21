@@ -1125,7 +1125,7 @@ test('should render empty style tag', t => {
   t.end()
 })
 
-test.only('mark unnamed slot', t => {
+test('mark unnamed slot with wrapping span', t => {
   const html = enhance({
     bodyContent: true,
     uuidFunction: function() { return 'xyz' },
@@ -1148,6 +1148,59 @@ test.only('mark unnamed slot', t => {
   <div><span slot-id="xyz" slot="" style="display:content;">Stuff</span></div>
   <p><span slot="foo" slot-id="xyz">FOO</span></p>
   <main><span slot="bar" slot-id="xyz" style="display:content;"></span></main>
+</my-marked-slot>
+`
+  t.equal(
+    strip(actual),
+    strip(expected),
+    'Will you look at that! The unnamed slot was marked.'
+  )
+  t.end()
+})
+
+
+test.only('mark slots with comments', t => {
+  const html = enhance({
+    bodyContent: true,
+    uuidFunction: function() { return 'xyz' },
+    markSlots: true,
+    elements: {
+      'my-marked-slot': ({ html }) => {
+        return html`
+         <div><slot></slot></div>
+         <p><slot name=foo></slot></p>
+         <main><slot name=bar></slot></main>`
+      },
+    },
+    enhancedAttr: false
+  })
+  const actual = html`
+  <my-marked-slot>
+    <b>Big</b>
+    Stuff
+    <span slot=foo>FOO</span>
+    <span slot=foo>TWO</span>
+  </my-marked-slot>
+  `
+  const expected = `
+<my-marked-slot instance-id="xyz">
+  <div>
+    <!-- slot start name="" id="xyz" -->
+    <b>Big</b>
+    Stuff
+    <!-- slot end name="" id="xyz" -->
+  </div>
+  <p>
+    <!-- slot start name="foo" id="xyz" -->
+    <span slot="foo">FOO</span>
+    <span slot="foo">TWO</span>
+    <!-- slot end name="foo" id="xyz" -->
+  </p>
+  <main>
+    <!-- slot start name="bar" id="xyz" -->
+    <span slot="bar"></span>
+    <!-- slot end name="bar" id="xyz" -->
+  </main>
 </my-marked-slot>
 `
   t.equal(
